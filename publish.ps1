@@ -21,11 +21,16 @@ param(
     [switch]$SkipRelease
 )
 
-$ErrorActionPreference = 'Stop'
+# 关键：Windows PowerShell 5.1 会把原生命令写到 stderr 的内容当成错误记录，
+# 配上 'Stop' 会直接把脚本打断（gh auth status 未登录时正是写 stderr）。
+# 所以这里用 Continue，所有失败一律靠 $LASTEXITCODE 显式判断。
+$ErrorActionPreference = 'Continue'
+
 $Description = '雌小鬼肥鱼桌宠素材包：47 段 640×360 透明动画，用于 dsh-pet 桌宠换角色'
 
 function Write-Step([string]$Text) { Write-Host "  $Text" }
 function Write-Head([string]$Text) { Write-Host ""; Write-Host $Text -ForegroundColor Cyan }
+function Stop-Here([string]$Text) { throw $Text }
 
 # ---- 定位 gh / git（新装的程序可能还没进当前终端的 PATH）
 $env:Path = [System.Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
@@ -35,42 +40,47 @@ $gh = (Get-Command gh -ErrorAction SilentlyContinue).Source
 if (-not $gh) {
     $fallback = 'C:\Program Files\GitHub CLI\gh.exe'
     if (Test-Path $fallback) { $gh = $fallback; $env:Path += ';C:\Program Files\GitHub CLI' }
-    else { throw '找不到 gh。先装 GitHub CLI：winget install --id GitHub.cli -e' }
+    else { Stop-Here '找不到 gh。先装 GitHub CLI：winget install --id GitHub.cli -e' }
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-    throw '找不到 git。先装：winget install --id Git.Git -e（装完重开终端）'
+    Stop-Here '找不到 git。先装：winget install --id Git.Git -e（装完重开终端）'
 }
 
 Set-Location $PSScriptRoot
+Write-Host ("gh: {0}" -f $gh) -ForegroundColor DarkGray
 
 # ---- 1. 登录（设备授权，浏览器点一下）
 Write-Head '1/5 检查 GitHub 登录状态'
-& $gh auth status *> $null
+& $gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Step '还没登录。接下来 gh 会打开浏览器并给一个一次性代码，'
-    Write-Step '你在浏览器里输入代码、点 Authorize 就行 —— 不需要在这里敲密码。'
+    Write-Step '还没登录。接下来会打开浏览器并给一个一次性代码，'
+    Write-Step '你在浏览器里输入代码、点 Authorize 就行 —— 这里不用敲密码。'
     & $gh auth login --hostname github.com --git-protocol https --web
-    if ($LASTEXITCODE -ne 0) { throw '登录没有完成，脚本停止。' }
+    if ($LASTEXITCODE -ne 0) { Stop-Here '登录没有完成，脚本停止。' }
 } else {
-    $who = (& $gh api user --jq '.login' 2>$null)
-    Write-Step "已登录：$who"
+    Write-Step '已经登录过，跳过。'
 }
+
+$owner = (& $gh api user --jq '.login' 2>&1)
+if ($LASTEXITCODE -ne 0) { Stop-Here '取不到 GitHub 用户名，登录可能没真正完成。' }
+Write-Step "账号：$owner"
 
 # ---- 2. 建仓库（已存在就跳过）
 Write-Head '2/5 检查远程仓库'
-& $gh repo view "$Repo" *> $null
-if ($LASTEXITCODE -eq 0) {
-    Write-Step "仓库已存在：$Repo"
-    $remotes = git remote
+& $gh repo view "$Repo" 2>&1 | Out-Null
+$repoExists = ($LASTEXITCODE -eq 0)
+
+if ($repoExists) {
+    Write-Step "仓库已存在：$owner/$Repo"
+    $remotes = @(git remote)
     if ($remotes -notcontains 'origin') {
-        $owner = & $gh api user --jq '.login'
         git remote add origin "https://github.com/$owner/$Repo.git"
         Write-Step '已补上 origin'
     }
 } else {
-    Write-Step "创建并推送：$Repo（public）"
+    Write-Step "创建并推送：$owner/$Repo（public）"
     & $gh repo create $Repo --public --source . --remote origin --push --description $Description
-    if ($LASTEXITCODE -ne 0) { throw '创建仓库失败。' }
+    if ($LASTEXITCODE -ne 0) { Stop-Here '创建仓库失败。' }
 }
 
 # ---- 3. push
@@ -80,7 +90,7 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host '  推送被拒，先同步远程再重试…' -ForegroundColor Yellow
     git pull --rebase origin main
     git push -u origin main
-    if ($LASTEXITCODE -ne 0) { throw '推送失败，检查是否有冲突。' }
+    if ($LASTEXITCODE -ne 0) { Stop-Here '推送失败，检查是否有冲突。' }
 }
 
 # ---- 4. tag
@@ -123,7 +133,7 @@ $notes = @'
 角色参考了社区「大肥鱼 / 鲸鱼娘」的人物设计语言，为独立角色。
 '@
 
-& $gh release view v1.0.0 *> $null
+& $gh release view v1.0.0 2>&1 | Out-Null
 if ($LASTEXITCODE -eq 0) {
     Write-Step 'Release 已存在，改为追加附件'
     & $gh release upload v1.0.0 $Zip --clobber
@@ -132,5 +142,4 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host ''
-Write-Host '完成。仓库地址：' -ForegroundColor Green
-& $gh repo view $Repo --web 2>$null
+Write-Host ("完成。仓库地址：https://github.com/{0}/{1}" -f $owner, $Repo) -ForegroundColor Green
