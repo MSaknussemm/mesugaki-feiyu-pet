@@ -1,0 +1,6 @@
+dist/
+*.ours.webm
+__pycache__/
+*.pyc
+Thumbs.db
+.DS_Store
