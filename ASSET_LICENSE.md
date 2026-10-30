@@ -6,7 +6,8 @@
 
 `characters/bluewhale_tv/` 下的全部 `.webm` 动画与三个 `.json` 配置，以
 [Creative Commons 署名—非商业性使用—相同方式共享 4.0 国际](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)
-（CC BY-NC-SA 4.0）发布。法律文本见 <https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt>。
+（CC BY-NC-SA 4.0）发布。法律全文见仓库根目录的 [LICENSE](LICENSE)，
+在线版 <https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.txt>。
 
 你可以：
 
@@ -24,7 +25,7 @@
 
 ## 2. 脚本：MIT
 
-`install.ps1`、`tools/` 下的 Python 脚本，以 MIT 许可发布，见 [LICENSE-CODE](LICENSE-CODE)。
+`install.ps1`、`tools/` 下的 Python 脚本，以 MIT 许可发布，见 [LICENSES/MIT.txt](LICENSES/MIT.txt)。
 随便改、随便用、随便商用，保留版权声明即可。
 
 ## 3. 署名链（二次发布必须原样保留）
